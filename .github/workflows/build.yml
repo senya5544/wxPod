@@ -27,3 +27,9 @@ jobs:
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
 
+    - name: Upload artifact
+      uses: actions/upload-artifact@v6.0.0
+      with:
+        name: wxPod-${{github.sha}}
+        path: ${{github.workspace}}/build/wxPod
+
