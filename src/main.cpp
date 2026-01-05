@@ -1,32 +1,49 @@
-#include <wx/wx.h>
+#include "app.h"
+
 #include <wx/splitter.h>
-#include <wx/dataview.h>
 #include <wx/persist/toplevel.h>
 #include <wx/artprov.h>
-#include <itdb.h>
-#include <libudev.h>
 #include <mntent.h>
 #include <filesystem>
 
-#include "app.h"
+std::map<int, std::string> PRODUCTS = { // https://theapplewiki.com/wiki/USB_Product_IDs
+    {0x1202, "iPod (1st/2nd generation)"},
+    {0x1201, "iPod (3rd generation)"},
+    {0x1203, "iPod (4th generation)"},
+    {0x1204, "iPod Photo"},
+    {0x1209, "iPod (5th generation)"},
+    {0x1261, "iPod classic (6th generation)"},
+    {0x1205, "iPod mini (1st/2nd generation)"},
+    {0x120A, "iPod nano"},
+    {0x1260, "iPod nano (2nd generation)"},
+    {0x1262, "iPod nano (3rd generation)"},
+    {0x1263, "iPod nano (4th generation)"},
+    {0x1265, "iPod nano (5th generation)"},
+    {0x1266, "iPod nano (6th generation)"},
+    {0x1267, "iPod nano (7th generation)"},
+    {0x1300, "iPod shuffle"},
+    {0x1301, "iPod shuffle (2nd generation)"},
+};
 
-#define wxV(...) [](std::vector<std::string> X){\
-    wxVector<wxVariant> _;\
-    for(int i = 0; i < X.size(); i++) {\
-        _.push_back(wxString::FromUTF8(X[i]));\
-    }\
-    return _;\
-}(__VA_ARGS__) // std::vector<std::string> -> wxVector<wxVariant> helper macro
+wxVector<wxVariant> wxV(std::vector<std::string> X) { // std::vector<std::string> -> wxVector<wxVariant> helper fuction
+    wxVector<wxVariant> _;
+    for(int i = 0; i < X.size(); i++) {
+        _.push_back(wxString::FromUTF8(X[i]));
+    }
+    return _;
+}
 
-#define wxV_wxs(...) [](std::vector<wxString> X){\
-    wxVector<wxVariant> _;\
-    for(int i = 0; i < X.size(); i++) {\
-        _.push_back(X[i]);\
-    }\
-    return _;\
-}(__VA_ARGS__) // std::vector<wxString> -> wxVector<wxVariant> helper macro
+wxVector<wxVariant> wxV_wxs(std::vector<wxString> X) { // std::vector<wxString> -> wxVector<wxVariant> helper function
+    wxVector<wxVariant> _;
+    for(int i = 0; i < X.size(); i++) {
+        _.push_back(X[i]);
+    }
+    return _;
+} 
 
 bool App::OnInit() {
+    wxInitAllImageHandlers();
+
     m_udev = udev_new();
 
     auto frame = new Frame(this);
@@ -96,8 +113,8 @@ Frame::Frame(App* app) : wxFrame(nullptr, wxID_ANY, "wxPod", wxDefaultPosition, 
 
     m_library_table = new wxDataViewListCtrl(splitter, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxDV_MULTIPLE);
     m_library_table_col_title = m_library_table->AppendTextColumn("Title", wxDATAVIEW_CELL_EDITABLE, -1, wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_REORDERABLE);
-    m_library_table->AppendTextColumn("Artist", wxDATAVIEW_CELL_INERT, -1, wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_REORDERABLE);
-    m_library_table->AppendTextColumn("Album", wxDATAVIEW_CELL_INERT, -1, wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_REORDERABLE);
+    m_library_table_col_artist = m_library_table->AppendTextColumn("Artist", wxDATAVIEW_CELL_INERT, -1, wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_REORDERABLE);
+    m_library_table_col_album = m_library_table->AppendTextColumn("Album", wxDATAVIEW_CELL_INERT, -1, wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_REORDERABLE);
     m_library_table->AppendTextColumn("Duration", wxDATAVIEW_CELL_INERT, -1, wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_REORDERABLE);
     m_library_table->GetColumn(0)->SetSortOrder(true);
     m_library_table->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED, &Frame::OnTrackOpened, this);
@@ -108,7 +125,7 @@ Frame::Frame(App* app) : wxFrame(nullptr, wxID_ANY, "wxPod", wxDefaultPosition, 
     auto filters_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     m_artists_table = new wxDataViewListCtrl(filters, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxDV_MULTIPLE);
-    m_artists_table->AppendTextColumn("Artists", wxDATAVIEW_CELL_INERT, -1, wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE);
+    m_artists_table_col = m_artists_table->AppendTextColumn("Artists", wxDATAVIEW_CELL_EDITABLE, -1, wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE);
     m_artists_table->AssociateModel(new FiltersDVLStore());
     m_artists_table->GetColumn(0)->SetSortOrder(true);
     
@@ -117,12 +134,15 @@ Frame::Frame(App* app) : wxFrame(nullptr, wxID_ANY, "wxPod", wxDefaultPosition, 
     m_artists_table->Bind(wxEVT_DATAVIEW_SELECTION_CHANGED, &Frame::OnArtistsSelectionChanged, this);
 
     m_albums_table = new wxDataViewListCtrl(filters, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxDV_MULTIPLE);
-    m_albums_table->AppendTextColumn("Albums", wxDATAVIEW_CELL_INERT, -1, wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE);
+    m_albums_table_col = m_albums_table->AppendTextColumn("Albums", wxDATAVIEW_CELL_EDITABLE, -1, wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE);
     m_albums_table->AssociateModel(new FiltersDVLStore());
     m_albums_table->GetColumn(0)->SetSortOrder(true);
     m_albums_table->AppendItem(wxV({"All"}), -1);
     m_albums_table->SelectRow(0);
     m_albums_table->Bind(wxEVT_DATAVIEW_SELECTION_CHANGED, &Frame::OnAlbumsSelectionChanged, this);
+    m_albums_table->Bind(wxEVT_DATAVIEW_ITEM_CONTEXT_MENU, &Frame::OnAlbumContextMenu, this);
+    m_albums_table->Bind(wxEVT_DATAVIEW_ITEM_START_EDITING, &Frame::OnAlbumEditingStarted, this);
+    m_albums_table->Bind(wxEVT_DATAVIEW_ITEM_VALUE_CHANGED, &Frame::OnAlbumRenamed, this);
     
     filters_sizer->Add(m_artists_table, 1, wxEXPAND | wxALL);
     filters_sizer->Add(m_albums_table, 1, wxEXPAND | wxALL);
@@ -132,7 +152,6 @@ Frame::Frame(App* app) : wxFrame(nullptr, wxID_ANY, "wxPod", wxDefaultPosition, 
     sizer->Add(splitter, 1, wxEXPAND | wxALL, 5);
 
     SetSizer(sizer);
-    Layout();
     SetMinSize(wxSize(400, 225));
     Refresh();
 
@@ -253,6 +272,8 @@ void Frame::OnApply(wxCommandEvent& ev) {
             }
         }
         itdb_write(m_app->m_itdb, nullptr);
+        listTracks();
+        Refresh();
     }
 }
 
@@ -345,11 +366,14 @@ void Frame::OnTrackOpened(wxDataViewEvent& ev) {
 
 void Frame::OnTrackContextMenu(wxDataViewEvent& ev) {
     if(ev.GetItem().IsOk()) {
+        m_library_table->UnselectAll();
+        m_library_table->Select(ev.GetItem());
+
         wxMenu context;
-        context.Append(TRACK_CONTEXT_MENU::RENAME, "Rename")->SetBitmap(wxArtProvider::GetBitmap(wxART_EDIT));
-        context.Append(TRACK_CONTEXT_MENU::DELETE, "Delete")->SetBitmap(wxArtProvider::GetBitmap(wxART_DELETE));
+        context.Append(CONTEXT_MENU::RENAME, "Rename")->SetBitmap(wxArtProvider::GetBitmap(wxART_EDIT));
+        context.Append(CONTEXT_MENU::DELETE, "Delete")->SetBitmap(wxArtProvider::GetBitmap(wxART_DELETE));
         context.AppendSeparator();
-        context.Append(TRACK_CONTEXT_MENU::PROPERTIES, "Properties");
+        context.Append(CONTEXT_MENU::PROPERTIES, "Properties");
         context.Bind(wxEVT_MENU, &Frame::OnTrackContextMenuButton, this, wxID_ANY);
         context.SetClientData((void*)(intptr_t)m_library_table->ItemToRow(ev.GetItem()));
 
@@ -359,11 +383,12 @@ void Frame::OnTrackContextMenu(wxDataViewEvent& ev) {
 
 void Frame::OnTrackContextMenuButton(wxCommandEvent& ev) {
     wxDataViewItem item = m_library_table->RowToItem((intptr_t)static_cast<wxMenu*>(ev.GetEventObject())->GetClientData());
+    if(!item.IsOk()) return;
     switch(ev.GetId()) {
-        case TRACK_CONTEXT_MENU::RENAME:
+        case CONTEXT_MENU::RENAME:
             m_library_table->EditItem(item, m_library_table_col_title);
             break;
-        case TRACK_CONTEXT_MENU::DELETE:
+        case CONTEXT_MENU::DELETE:
         {
             auto dialog = new wxMessageDialog(this, "Are you sure you want to delete this track?", "Delete", wxYES_NO | wxNO_DEFAULT | wxICON_WARNING | wxCENTRE);
             if(dialog->ShowModal() == wxID_YES) {
@@ -379,16 +404,103 @@ void Frame::OnTrackContextMenuButton(wxCommandEvent& ev) {
             }
             break;
         }
-        case TRACK_CONTEXT_MENU::PROPERTIES:
+        case CONTEXT_MENU::PROPERTIES:
+            auto properties = new TrackPropertiesDialog(this, m_library[m_library_table->GetItemData(item)], item);
+            properties->Show();
+
             break;
     }
 }
 
 void Frame::OnTrackRenamed(wxDataViewEvent& ev) {
+    if(!ev.GetItem().IsOk()) return;
     Itdb_Track* track = m_library[m_library_table->GetItemData(ev.GetItem())];
     std::string new_title = m_library_table->GetTextValue(m_library_table->ItemToRow(ev.GetItem()), m_library_table->GetColumnPosition(m_library_table_col_title)).utf8_string();
     if(new_title != track->title) {
         track->title = g_strdup(new_title.c_str());
+        IndicateUnsavedChanges();
+    }
+}
+
+void Frame::OnAlbumContextMenu(wxDataViewEvent& ev) {
+    if(ev.GetItem().IsOk()) {
+        if(m_albums_table->GetItemData(ev.GetItem()) == -1) return;
+        m_albums_table->UnselectAll();
+        m_albums_table->Select(ev.GetItem());
+        UpdateTrackList();
+
+        wxMenu context;
+        context.Append(CONTEXT_MENU::RENAME, "Rename")->SetBitmap(wxArtProvider::GetBitmap(wxART_EDIT));
+        context.Append(CONTEXT_MENU::DELETE, "Delete")->SetBitmap(wxArtProvider::GetBitmap(wxART_DELETE));
+        context.AppendSeparator();
+        context.Append(CONTEXT_MENU::PROPERTIES, "Properties");
+        context.Bind(wxEVT_MENU, &Frame::OnAlbumContextMenuButton, this, wxID_ANY);
+        context.SetClientData((void*)(intptr_t)m_albums_table->ItemToRow(ev.GetItem()));
+
+        PopupMenu(&context);
+    }
+}
+
+void Frame::OnAlbumContextMenuButton(wxCommandEvent& ev) {
+    wxDataViewItem item = m_albums_table->RowToItem((intptr_t)static_cast<wxMenu*>(ev.GetEventObject())->GetClientData());
+    if(!item.IsOk()) return;
+    if(m_albums_table->GetItemData(item) == -1) return;
+    switch(ev.GetId()) {
+        case CONTEXT_MENU::RENAME:
+            m_albums_table->EditItem(item, m_albums_table_col);
+            break;
+        case CONTEXT_MENU::DELETE:
+        {
+            auto dialog = new wxMessageDialog(this, "Are you sure you want to delete this album?", "Delete", wxYES_NO | wxNO_DEFAULT | wxICON_WARNING | wxCENTRE);
+            if(dialog->ShowModal() == wxID_YES) {
+                for(int i = 0; i < m_library.size(); i++) {
+                    if(m_library[i] != nullptr && m_library[i]->artist == m_albums[m_albums_table->GetItemData(item)].artist && m_library[i]->album == m_albums[m_albums_table->GetItemData(item)].title) {
+                        std::string path = m_library[i]->ipod_path;
+                        itdb_filename_ipod2fs(path.data());
+                        std::cout << "removing " << m_library[i]->artist << " - " << m_library[i]->title << " (" << path << ")" << std::endl;
+                        m_to_be_removed.push_back(itdb_get_mountpoint(m_app->m_itdb) + path);
+                        itdb_playlist_remove_track(itdb_playlist_mpl(m_app->m_itdb), m_library[i]);
+                        itdb_track_remove(m_library[i]);
+                        m_library[i] = nullptr;
+                    }
+                }
+                m_albums_table->DeleteItem(m_albums_table->ItemToRow(item));
+                IndicateUnsavedChanges();
+            }
+            break;
+        }
+        case CONTEXT_MENU::PROPERTIES:
+            auto properties = new AlbumPropertiesDialog(this, m_albums[m_albums_table->GetItemData(item)], item);
+            properties->Show();
+            break;
+    }
+}
+
+void Frame::OnAlbumEditingStarted(wxDataViewEvent& ev) {
+    if(!ev.GetItem().IsOk()) return;
+    if(m_albums_table->GetItemData(ev.GetItem()) == -1) {
+        ev.Veto();
+        return;
+    }
+}
+
+void Frame::OnAlbumRenamed(wxDataViewEvent& ev) {
+    if(!ev.GetItem().IsOk()) return;
+    if(m_albums_table->GetItemData(ev.GetItem()) == -1) return;
+    Album album = m_albums[m_albums_table->GetItemData(ev.GetItem())];
+    std::string new_title = m_albums_table->GetTextValue(m_albums_table->ItemToRow(ev.GetItem()), m_albums_table->GetColumnPosition(m_albums_table_col)).utf8_string();
+    if(new_title != album.title) {
+        for(int i = 0; i < m_library.size(); i++) {
+            if(m_library[i] != nullptr && m_library[i]->album == album.title) {
+                m_library[i]->album = g_strdup(new_title.c_str());
+            }
+        }
+        for(int i = 0; i < m_library_table->GetItemCount(); i++) {
+            if(m_library_table->GetTextValue(i, m_library_table->GetColumnPosition(m_library_table_col_album)) == album.title) {
+                m_library_table->SetTextValue(new_title, i, m_library_table->GetColumnPosition(m_library_table_col_album));
+            }
+        }
+        m_albums[m_albums_table->GetItemData(ev.GetItem())].title = new_title;
         IndicateUnsavedChanges();
     }
 }

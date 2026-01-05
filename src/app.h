@@ -2,42 +2,15 @@
 
 #include <wx/wx.h>
 #include <wx/dataview.h>
+#include <wx/notebook.h>
 #include <libudev.h>
 #include <itdb.h>
 #include <map>
 
-std::map<int, std::string> PRODUCTS = { // https://theapplewiki.com/wiki/USB_Product_IDs
-    {0x1202, "iPod (1st/2nd generation)"},
-    {0x1201, "iPod (3rd generation)"},
-    {0x1203, "iPod (4th generation)"},
-    {0x1204, "iPod Photo"},
-    {0x1209, "iPod (5th generation)"},
-    {0x1261, "iPod classic (6th generation)"},
-    {0x1205, "iPod mini (1st/2nd generation)"},
-    {0x120A, "iPod nano"},
-    {0x1260, "iPod nano (2nd generation)"},
-    {0x1262, "iPod nano (3rd generation)"},
-    {0x1263, "iPod nano (4th generation)"},
-    {0x1265, "iPod nano (5th generation)"},
-    {0x1266, "iPod nano (6th generation)"},
-    {0x1267, "iPod nano (7th generation)"},
-    {0x1300, "iPod shuffle"},
-    {0x1301, "iPod shuffle (2nd generation)"},
-};
-
-enum TRACK_CONTEXT_MENU {
+enum CONTEXT_MENU {
     RENAME,
     DELETE,
     PROPERTIES
-};
-
-struct Track {
-    uint id;
-    std::string title;
-    std::string artist;
-    std::string album;
-    ulong duration;
-    std::string path;
 };
 
 struct Album {
@@ -56,21 +29,30 @@ public:
 class Frame : public wxFrame {
 public:
     Frame(App* app);
-private:
-    App* m_app;
-    wxDataViewListCtrl* m_library_table;
-    wxDataViewColumn* m_library_table_col_title;
-    wxComboBox* m_devices_cb;
-    wxButton* m_db_apply;
-    wxButton* m_db_discard;
-    wxDataViewListCtrl* m_artists_table;
-    wxDataViewListCtrl* m_albums_table;
 
-    std::map<std::string, std::string> m_devices;
-    std::vector<std::string> m_devices_mounts;
     std::vector<Itdb_Track*> m_library;
     std::vector<std::string> m_artists;
     std::vector<Album> m_albums;
+
+    wxDataViewListCtrl* m_library_table;
+    wxDataViewListCtrl* m_artists_table;
+    wxDataViewListCtrl* m_albums_table;
+    wxDataViewColumn* m_library_table_col_title;
+    wxDataViewColumn* m_library_table_col_artist;
+    wxDataViewColumn* m_library_table_col_album;
+    wxDataViewColumn* m_artists_table_col;
+    wxDataViewColumn* m_albums_table_col;
+
+    void IndicateUnsavedChanges();
+private:
+    App* m_app;
+
+    wxComboBox* m_devices_cb;
+    wxButton* m_db_apply;
+    wxButton* m_db_discard;
+
+    std::map<std::string, std::string> m_devices;
+    std::vector<std::string> m_devices_mounts;
     int m_device_selected = -1;
     bool m_unsaved = false;
     std::vector<std::string> m_to_be_removed;
@@ -81,7 +63,6 @@ private:
     void UpdateAlbumList();
     void UpdateTrackList();
     void Refresh();
-    void IndicateUnsavedChanges();
 
     void OnExit(wxCloseEvent& ev);
 
@@ -95,6 +76,11 @@ private:
     void OnTrackContextMenuButton(wxCommandEvent& ev);
     void OnTrackRenamed(wxDataViewEvent& ev);
 
+    void OnAlbumContextMenu(wxDataViewEvent& ev);
+    void OnAlbumContextMenuButton(wxCommandEvent& ev);
+    void OnAlbumEditingStarted(wxDataViewEvent& ev);
+    void OnAlbumRenamed(wxDataViewEvent& ev);
+
     void OnArtistsSelectionChanged(wxDataViewEvent& ev);
     void OnAlbumsSelectionChanged(wxDataViewEvent& ev);
 };
@@ -105,39 +91,36 @@ public:
     virtual int Compare(const wxDataViewItem &item1, const wxDataViewItem &item2, unsigned int column, bool ascending) const override;
 };
 
-class TrackPropertiesFrame : public wxFrame {
+class TrackPropertiesDialog : public wxDialog {
 public:
-    TrackPropertiesFrame(App* app);
+    TrackPropertiesDialog(Frame* frame, Itdb_Track* track, wxDataViewItem item);
 private:
-    App* m_app;
-    wxDataViewListCtrl* m_library_table;
-    wxDataViewColumn* m_library_table_col_title;
-    wxComboBox* m_devices_cb;
-    wxDataViewListCtrl* m_artists_table;
-    wxDataViewListCtrl* m_albums_table;
+    Frame* m_frame;
+    Itdb_Track* m_track;
+    wxDataViewItem m_item;
 
-    std::map<std::string, std::string> m_devices;
-    std::vector<std::string> m_devices_mounts;
-    std::vector<Itdb_Track*> m_library;
-    std::vector<std::string> m_artists;
-    std::vector<Album> m_albums;
-    int m_device_selected = -1;
+    wxTextCtrl* m_title_input;
+    wxTextCtrl* m_artist_input;
+    wxTextCtrl* m_album_input;
+    wxTextCtrl* m_genre_input;
 
-    void listDevices();
-    void listTracks();
-    
-    void UpdateAlbumList();
-    void UpdateTrackList();
-    void Refresh();
+    void OnOk(wxCommandEvent& ev);
+    void OnCancel(wxCommandEvent& ev);
+    void OnExit(wxCloseEvent& ev);
+};
 
-    void OnDeviceSelected(wxCommandEvent& ev);
-    void OnRefresh(wxCommandEvent& ev);
+class AlbumPropertiesDialog : public wxDialog {
+public:
+    AlbumPropertiesDialog(Frame* frame, Album album, wxDataViewItem item);
+private:
+    Frame* m_frame;
+    Album m_album;
+    wxDataViewItem m_item;
 
-    void OnTrackOpened(wxDataViewEvent& ev);
-    void OnTrackContextMenu(wxDataViewEvent& ev);
-    void OnTrackContextMenuButton(wxCommandEvent& ev);
-    void OnTrackRenamed(wxDataViewEvent& ev);
+    wxTextCtrl* m_title_input;
+    wxTextCtrl* m_artist_input;
 
-    void OnArtistsSelectionChanged(wxDataViewEvent& ev);
-    void OnAlbumsSelectionChanged(wxDataViewEvent& ev);
+    void OnOk(wxCommandEvent& ev);
+    void OnCancel(wxCommandEvent& ev);
+    void OnExit(wxCloseEvent& ev);
 };

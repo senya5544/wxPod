@@ -13,6 +13,7 @@ include_directories(
 
 add_executable(wxPod
     src/main.cpp
+    src/properties.cpp
 )
 
 target_link_libraries(wxPod
