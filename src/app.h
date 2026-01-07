@@ -3,6 +3,7 @@
 #include <wx/wx.h>
 #include <wx/dataview.h>
 #include <wx/notebook.h>
+#include <taglib/tag.h>
 #include <libudev.h>
 #include <itdb.h>
 #include <map>
@@ -104,6 +105,8 @@ private:
     wxTextCtrl* m_album_input;
     wxTextCtrl* m_genre_input;
 
+    //void OnPrevious(wxCommandEvent& ev);
+    //void OnNext(wxCommandEvent& ev);
     void OnOk(wxCommandEvent& ev);
     void OnCancel(wxCommandEvent& ev);
     void OnExit(wxCloseEvent& ev);
@@ -119,6 +122,16 @@ private:
 
     wxTextCtrl* m_title_input;
     wxTextCtrl* m_artist_input;
+    wxStaticBitmap* m_bitmap;
+
+    bool m_missing_artwork = false;
+    std::string m_new_artwork_path;
+    TagLib::ByteVector m_new_artwork;
+    bool m_remove_artwork = false;
+
+    void OnBrowse(wxCommandEvent& ev);
+    void OnFetch(wxCommandEvent& ev);
+    void OnRemove(wxCommandEvent& ev);
 
     void OnOk(wxCommandEvent& ev);
     void OnCancel(wxCommandEvent& ev);
