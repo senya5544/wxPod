@@ -8,12 +8,16 @@ public:
 
     ArtistFilters(wxWindow* parent, Frame* frame, Device* device);
     void SetDevice(Device* device);
-    void AddArtist(std::string artist);
+    void AddArtist(std::string artist, int data);
 private:
     Frame* m_frame;
     Device* m_device;
 
     void OnSelectionChanged(wxDataViewEvent& ev);
+    void OnContextMenu(wxDataViewEvent& ev);
+    void OnContextMenuButton(wxCommandEvent& ev);
+    void OnArtistRenamingStarted(wxDataViewEvent& ev);
+    void OnArtistRenamed(wxDataViewEvent& ev);
 };
 
 class AlbumFilters : public wxDataViewListCtrl {

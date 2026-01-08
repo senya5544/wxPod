@@ -249,7 +249,7 @@ void Frame::RefreshApp() {
             Album album({track->album, track->artist});
             if(std::find(m_device->m_artists.begin(), m_device->m_artists.end(), track->artist) == m_device->m_artists.end()) {
                 m_device->m_artists.push_back(track->artist);
-                m_artist_filters->AddArtist(track->artist);
+                m_artist_filters->AddArtist(track->artist, m_device->m_artists.size() - 1);
             }
             if(std::find_if(m_device->m_albums.begin(), m_device->m_albums.end(), [&](Album a){
                 return a.artist == album.artist && a.title == album.title;

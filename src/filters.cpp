@@ -31,14 +31,17 @@ ArtistFilters::ArtistFilters(wxWindow* parent, Frame* frame, Device* device) : w
     AppendItem(wxV({"All"}), -1); // -1 means this item is "All" (it's "special")
     SelectRow(0);
     Bind(wxEVT_DATAVIEW_SELECTION_CHANGED, &ArtistFilters::OnSelectionChanged, this);
+    Bind(wxEVT_DATAVIEW_ITEM_CONTEXT_MENU, &ArtistFilters::OnContextMenu, this);
+    Bind(wxEVT_DATAVIEW_ITEM_START_EDITING, &ArtistFilters::OnArtistRenamingStarted, this);
+    Bind(wxEVT_DATAVIEW_ITEM_VALUE_CHANGED, &ArtistFilters::OnArtistRenamed, this);
 }
 
 void ArtistFilters::SetDevice(Device* device) {
     m_device = device;
 }
 
-void ArtistFilters::AddArtist(std::string artist) {
-    AppendItem(wxV({artist}));
+void ArtistFilters::AddArtist(std::string artist, int data) {
+    AppendItem(wxV({artist}), data);
 }
 
 void ArtistFilters::OnSelectionChanged(wxDataViewEvent& ev) {
@@ -51,6 +54,84 @@ void ArtistFilters::OnSelectionChanged(wxDataViewEvent& ev) {
     }
     
     m_frame->m_album_filters->RefreshList();
+}
+
+void ArtistFilters::OnContextMenu(wxDataViewEvent& ev) {
+    if(ev.GetItem().IsOk()) {
+        if(GetItemData(ev.GetItem()) == -1) return;
+        UnselectAll();
+        Select(ev.GetItem());
+        m_frame->m_tracklist->RefreshList();
+
+        wxMenu context;
+        context.Append(CONTEXT_MENU::RENAME, "Rename")->SetBitmap(wxArtProvider::GetBitmap(wxART_EDIT));
+        context.Append(CONTEXT_MENU::DELETE, "Delete")->SetBitmap(wxArtProvider::GetBitmap(wxART_DELETE));
+        context.Bind(wxEVT_MENU, &ArtistFilters::OnContextMenuButton, this, wxID_ANY);
+        context.SetClientData((void*)(intptr_t)ItemToRow(ev.GetItem()));
+
+        PopupMenu(&context);
+    }
+}
+
+void ArtistFilters::OnContextMenuButton(wxCommandEvent& ev) {
+    wxDataViewItem item = RowToItem((intptr_t)static_cast<wxMenu*>(ev.GetEventObject())->GetClientData());
+    if(!item.IsOk()) return;
+    if(GetItemData(item) == -1) return;
+    switch(ev.GetId()) {
+        case CONTEXT_MENU::RENAME:
+            EditItem(item, m_col);
+            break;
+        case CONTEXT_MENU::DELETE:
+        {
+            // TODO: add Device::RemoveArtist() method instead
+            auto dialog = new wxMessageDialog(this, "Are you sure you want to delete this artist?", "Delete", wxYES_NO | wxNO_DEFAULT | wxICON_WARNING | wxCENTRE);
+            if(dialog->ShowModal() == wxID_YES) {
+                for(int i = 0; i < m_device->m_library.size(); i++) {
+                    if(m_device->m_library[i] != nullptr && m_device->m_library[i]->artist == m_device->m_artists[GetItemData(item)]) {
+                        std::string path = m_device->m_library[i]->ipod_path;
+                        itdb_filename_ipod2fs(path.data());
+                        m_device->m_to_be_removed.push_back(itdb_get_mountpoint(m_device->m_itdb) + path);
+                        itdb_playlist_remove_track(itdb_playlist_mpl(m_device->m_itdb), m_device->m_library[i]);
+                        itdb_track_remove(m_device->m_library[i]);
+                        m_device->m_library[i] = nullptr;
+                    }
+                }
+                DeleteItem(ItemToRow(item));
+                m_frame->IndicateUnsavedChanges();
+                m_frame->RefreshApp();
+            }
+            break;
+        }
+    }
+}
+
+void ArtistFilters::OnArtistRenamingStarted(wxDataViewEvent& ev) {
+    if(!ev.GetItem().IsOk()) return;
+    if(GetItemData(ev.GetItem()) == -1) {
+        ev.Veto();
+        return;
+    }
+}
+
+void ArtistFilters::OnArtistRenamed(wxDataViewEvent& ev) {
+    if(!ev.GetItem().IsOk()) return;
+    if(GetItemData(ev.GetItem()) == -1) return;
+    std::string artist = m_device->m_artists[GetItemData(ev.GetItem())];
+    std::string new_title = GetTextValue(ItemToRow(ev.GetItem()), GetColumnPosition(m_col)).utf8_string();
+    if(new_title != artist) {
+        for(int i = 0; i < m_device->m_library.size(); i++) {
+            if(m_device->m_library[i] != nullptr && m_device->m_library[i]->artist == artist) {
+                m_device->m_library[i]->artist = g_strdup(new_title.c_str());
+            }
+        }
+        for(int i = 0; i < m_frame->m_tracklist->GetItemCount(); i++) {
+            if(m_frame->m_tracklist->GetTextValue(i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_artist)) == artist) {
+                m_frame->m_tracklist->SetTextValue(new_title, i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_artist));
+            }
+        }
+        m_device->m_artists[GetItemData(ev.GetItem())] = new_title;
+        m_frame->IndicateUnsavedChanges();
+    }
 }
 
 AlbumFilters::AlbumFilters(wxWindow* parent, Frame* frame, Device* device) : wxDataViewListCtrl(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxDV_MULTIPLE) {
@@ -156,6 +237,7 @@ void AlbumFilters::OnContextMenuButton(wxCommandEvent& ev) {
                 }
                 DeleteItem(ItemToRow(item));
                 m_frame->IndicateUnsavedChanges();
+                m_frame->RefreshApp();
             }
             break;
         }
@@ -181,7 +263,7 @@ void AlbumFilters::OnAlbumRenamed(wxDataViewEvent& ev) {
     std::string new_title = GetTextValue(ItemToRow(ev.GetItem()), GetColumnPosition(m_col)).utf8_string();
     if(new_title != album.title) {
         for(int i = 0; i < m_device->m_library.size(); i++) {
-            if(m_device->m_library[i] != nullptr && m_device->m_library[i]->album == album.title) {
+            if(m_device->m_library[i] != nullptr && m_device->m_library[i]->artist == album.artist && m_device->m_library[i]->album == album.title) {
                 m_device->m_library[i]->album = g_strdup(new_title.c_str());
             }
         }

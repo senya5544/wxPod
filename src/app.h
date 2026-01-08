@@ -40,6 +40,7 @@ public:
 
     Frame(App* app);
 
+    void RefreshApp();
     void IndicateUnsavedChanges();
 private:
     App* m_app;
@@ -54,7 +55,6 @@ private:
     bool m_unsaved = false;
 
     void listDevices();
-    void RefreshApp();
 
     void OnExit(wxCloseEvent& ev);
 

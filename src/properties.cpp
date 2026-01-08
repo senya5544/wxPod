@@ -302,12 +302,13 @@ void AlbumPropertiesDialog::OnOk(wxCommandEvent& ev) {
     
     if(new_title != m_album.title) {
         for(int i = 0; i < m_device->m_library.size(); i++) {
-            if(m_device->m_library[i]->album == m_album.title) {
+            if(m_device->m_library[i]->artist == m_album.artist && m_device->m_library[i]->album == m_album.title) {
                 m_device->m_library[i]->album = g_strdup(new_title.c_str());
             }
         }
         for(int i = 0; i < m_frame->m_tracklist->GetItemCount(); i++) {
-            if(m_frame->m_tracklist->GetTextValue(i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_album)) == m_album.title) {
+            if(m_frame->m_tracklist->GetTextValue(i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_artist)) == m_album.artist &&
+               m_frame->m_tracklist->GetTextValue(i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_album)) == m_album.title) {
                 m_frame->m_tracklist->SetTextValue(new_title, i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_album));
             }
         }
@@ -324,7 +325,8 @@ void AlbumPropertiesDialog::OnOk(wxCommandEvent& ev) {
             }
         }
         for(int i = 0; i < m_frame->m_tracklist->GetItemCount(); i++) {
-            if(m_frame->m_tracklist->GetTextValue(i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_album)) == m_album.title && m_frame->m_tracklist->GetTextValue(i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_artist)) == m_album.artist) {
+            if(m_frame->m_tracklist->GetTextValue(i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_album)) == m_album.title &&
+               m_frame->m_tracklist->GetTextValue(i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_artist)) == m_album.artist) {
                 m_frame->m_tracklist->SetTextValue(new_artist, i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_artist));
             }
         }
