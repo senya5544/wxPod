@@ -1,4 +1,7 @@
-#include "app.h"
+#include "properties.h"
+#include "device.h"
+#include "tracklist.h"
+#include "filters.h"
 
 #include <wx/artprov.h>
 #include <taglib/mpegfile.h>
@@ -23,8 +26,9 @@ wxSize FitImage(wxSize size1, wxSize size2) {
     }
 }
 
-TrackPropertiesDialog::TrackPropertiesDialog(Frame* frame, Itdb_Track* track, wxDataViewItem item) : wxDialog(nullptr, wxID_ANY, wxString::Format("%s Properties", wxString::FromUTF8(track->title)), wxDefaultPosition, wxSize(350, 300)) {
+TrackPropertiesDialog::TrackPropertiesDialog(Frame* frame, Device* device, Itdb_Track* track, wxDataViewItem item) : wxDialog(nullptr, wxID_ANY, wxString::Format("%s Properties", wxString::FromUTF8(track->title)), wxDefaultPosition, wxSize(350, 300)) {
     m_frame = frame;
+    m_device = device;
     m_track = track;
     m_item = item;
 
@@ -95,21 +99,21 @@ void TrackPropertiesDialog::OnOk(wxCommandEvent& ev) {
     std::string new_album = m_album_input->GetValue().utf8_string();
     std::string new_genre = m_genre_input->GetValue().utf8_string();
 
-    int row = m_frame->m_library_table->ItemToRow(m_item);
+    int row = m_frame->m_tracklist->ItemToRow(m_item);
 
     if(new_title != m_track->title) {
         m_track->title = g_strdup(new_title.c_str());
-        m_frame->m_library_table->SetTextValue(wxString::FromUTF8(new_title), row, m_frame->m_library_table->GetColumnPosition(m_frame->m_library_table_col_title));
+        m_frame->m_tracklist->SetTextValue(wxString::FromUTF8(new_title), row, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_title));
         m_frame->IndicateUnsavedChanges();
     }
     if(new_artist != m_track->artist) {
         m_track->artist = g_strdup(new_artist.c_str());
-        m_frame->m_library_table->SetTextValue(wxString::FromUTF8(new_artist), row, m_frame->m_library_table->GetColumnPosition(m_frame->m_library_table_col_artist));
+        m_frame->m_tracklist->SetTextValue(wxString::FromUTF8(new_artist), row, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_artist));
         m_frame->IndicateUnsavedChanges();
     }
     if(new_album != m_track->album) {
         m_track->album = g_strdup(new_album.c_str());
-        m_frame->m_library_table->SetTextValue(wxString::FromUTF8(new_album), row, m_frame->m_library_table->GetColumnPosition(m_frame->m_library_table_col_album));
+        m_frame->m_tracklist->SetTextValue(wxString::FromUTF8(new_album), row, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_album));
         m_frame->IndicateUnsavedChanges();
     }
     if(new_genre != m_track->genre) {
@@ -130,8 +134,9 @@ void TrackPropertiesDialog::OnExit(wxCloseEvent& ev) {
 }
 
 
-AlbumPropertiesDialog::AlbumPropertiesDialog(Frame* frame, Album album, wxDataViewItem item) : wxDialog(nullptr, wxID_ANY, wxString::Format("%s Properties", wxString::FromUTF8(album.title)), wxDefaultPosition, wxSize(350, 415)) {
+AlbumPropertiesDialog::AlbumPropertiesDialog(Frame* frame, Device* device, Album album, wxDataViewItem item) : wxDialog(nullptr, wxID_ANY, wxString::Format("%s Properties", wxString::FromUTF8(album.title)), wxDefaultPosition, wxSize(350, 415)) {
     m_frame = frame;
+    m_device = device;
     m_album = album;
     m_item = item;
 
@@ -148,9 +153,9 @@ AlbumPropertiesDialog::AlbumPropertiesDialog(Frame* frame, Album album, wxDataVi
     sizer->Add(album_properties, 1, wxALL | wxEXPAND, 10);
 
     gpointer pixbuf;
-    for(int i = 0; i < m_frame->m_library.size(); i++) {
-        if(m_frame->m_library[i] != nullptr && m_frame->m_library[i]->album == m_album.title && m_frame->m_library[i]->artist == m_album.artist) {
-            pixbuf = itdb_track_get_thumbnail(m_frame->m_library[i], -1, -1);
+    for(int i = 0; i < m_device->m_library.size(); i++) {
+        if(m_device->m_library[i] != nullptr && m_device->m_library[i]->album == m_album.title && m_device->m_library[i]->artist == m_album.artist) {
+            pixbuf = itdb_track_get_thumbnail(m_device->m_library[i], -1, -1);
             break;
         }
     }
@@ -230,11 +235,11 @@ void AlbumPropertiesDialog::OnBrowse(wxCommandEvent& ev) {
 }
 
 void AlbumPropertiesDialog::OnFetch(wxCommandEvent& ev) {
-    for(int i = 0; i < m_frame->m_library.size(); i++) {
-        if(m_frame->m_library[i] != nullptr && m_frame->m_library[i]->album == m_album.title && m_frame->m_library[i]->artist == m_album.artist) {
-            std::string ipod_path = m_frame->m_library[i]->ipod_path;
+    for(int i = 0; i < m_device->m_library.size(); i++) {
+        if(m_device->m_library[i] != nullptr && m_device->m_library[i]->album == m_album.title && m_device->m_library[i]->artist == m_album.artist) {
+            std::string ipod_path = m_device->m_library[i]->ipod_path;
             itdb_filename_ipod2fs(ipod_path.data());
-            std::string path = itdb_get_mountpoint(m_frame->m_library[i]->itdb) + ipod_path;
+            std::string path = itdb_get_mountpoint(m_device->m_library[i]->itdb) + ipod_path;
 
             TagLib::MPEG::File file(path.c_str());
             auto tag = file.ID3v2Tag();
@@ -292,63 +297,63 @@ void AlbumPropertiesDialog::OnOk(wxCommandEvent& ev) {
     std::string new_title = m_title_input->GetValue().utf8_string();
     std::string new_artist = m_artist_input->GetValue().utf8_string();
 
-    int row = m_frame->m_albums_table->ItemToRow(m_item);
-    int index = (int)m_frame->m_albums_table->GetItemData(m_item);
+    int row = m_frame->m_album_filters->ItemToRow(m_item);
+    int index = (int)m_frame->m_album_filters->GetItemData(m_item);
     
     if(new_title != m_album.title) {
-        for(int i = 0; i < m_frame->m_library.size(); i++) {
-            if(m_frame->m_library[i]->album == m_album.title) {
-                m_frame->m_library[i]->album = g_strdup(new_title.c_str());
+        for(int i = 0; i < m_device->m_library.size(); i++) {
+            if(m_device->m_library[i]->album == m_album.title) {
+                m_device->m_library[i]->album = g_strdup(new_title.c_str());
             }
         }
-        for(int i = 0; i < m_frame->m_library_table->GetItemCount(); i++) {
-            if(m_frame->m_library_table->GetTextValue(i, m_frame->m_library_table->GetColumnPosition(m_frame->m_library_table_col_album)) == m_album.title) {
-                m_frame->m_library_table->SetTextValue(new_title, i, m_frame->m_library_table->GetColumnPosition(m_frame->m_library_table_col_album));
+        for(int i = 0; i < m_frame->m_tracklist->GetItemCount(); i++) {
+            if(m_frame->m_tracklist->GetTextValue(i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_album)) == m_album.title) {
+                m_frame->m_tracklist->SetTextValue(new_title, i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_album));
             }
         }
         m_album.title = new_title;
-        m_frame->m_albums[m_frame->m_albums_table->GetItemData(m_item)].title = new_title;
+        m_device->m_albums[m_frame->m_album_filters->GetItemData(m_item)].title = new_title;
 
-        m_frame->m_albums_table->SetTextValue(wxString::FromUTF8(new_title), row, m_frame->m_albums_table->GetColumnPosition(m_frame->m_albums_table_col));
+        m_frame->m_album_filters->SetTextValue(wxString::FromUTF8(new_title), row, m_frame->m_album_filters->GetColumnPosition(m_frame->m_album_filters->m_col));
         m_frame->IndicateUnsavedChanges();
     }
     if(new_artist != m_album.artist) {
-        for(int i = 0; i < m_frame->m_library.size(); i++) {
-            if(m_frame->m_library[i] != nullptr && m_frame->m_library[i]->album == m_album.title && m_frame->m_library[i]->artist == m_album.artist) {
-                m_frame->m_library[i]->artist = g_strdup(new_artist.c_str());
+        for(int i = 0; i < m_device->m_library.size(); i++) {
+            if(m_device->m_library[i] != nullptr && m_device->m_library[i]->album == m_album.title && m_device->m_library[i]->artist == m_album.artist) {
+                m_device->m_library[i]->artist = g_strdup(new_artist.c_str());
             }
         }
-        for(int i = 0; i < m_frame->m_library_table->GetItemCount(); i++) {
-            if(m_frame->m_library_table->GetTextValue(i, m_frame->m_library_table->GetColumnPosition(m_frame->m_library_table_col_album)) == m_album.title && m_frame->m_library_table->GetTextValue(i, m_frame->m_library_table->GetColumnPosition(m_frame->m_library_table_col_artist)) == m_album.artist) {
-                m_frame->m_library_table->SetTextValue(new_artist, i, m_frame->m_library_table->GetColumnPosition(m_frame->m_library_table_col_artist));
+        for(int i = 0; i < m_frame->m_tracklist->GetItemCount(); i++) {
+            if(m_frame->m_tracklist->GetTextValue(i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_album)) == m_album.title && m_frame->m_tracklist->GetTextValue(i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_artist)) == m_album.artist) {
+                m_frame->m_tracklist->SetTextValue(new_artist, i, m_frame->m_tracklist->GetColumnPosition(m_frame->m_tracklist->m_col_artist));
             }
         }
         m_album.artist = new_artist;
-        m_frame->m_albums[m_frame->m_albums_table->GetItemData(m_item)].artist = new_artist;
+        m_device->m_albums[m_frame->m_album_filters->GetItemData(m_item)].artist = new_artist;
 
         m_frame->IndicateUnsavedChanges();
     }
     if(!m_new_artwork_path.empty()) {
-        for(int i = 0; i < m_frame->m_library.size(); i++) {
-            if(m_frame->m_library[i] != nullptr && m_frame->m_library[i]->album == m_album.title && m_frame->m_library[i]->artist == m_album.artist) {
-                itdb_track_set_thumbnails(m_frame->m_library[i], g_strdup(m_new_artwork_path.c_str()));
+        for(int i = 0; i < m_device->m_library.size(); i++) {
+            if(m_device->m_library[i] != nullptr && m_device->m_library[i]->album == m_album.title && m_device->m_library[i]->artist == m_album.artist) {
+                itdb_track_set_thumbnails(m_device->m_library[i], g_strdup(m_new_artwork_path.c_str()));
             }
         }
         m_frame->IndicateUnsavedChanges();
     }
     if(!m_new_artwork.isEmpty()) {
-        for(int i = 0; i < m_frame->m_library.size(); i++) {
-            if(m_frame->m_library[i] != nullptr && m_frame->m_library[i]->album == m_album.title && m_frame->m_library[i]->artist == m_album.artist) {
-                itdb_track_set_thumbnails_from_data(m_frame->m_library[i], (const guchar*)m_new_artwork.data(), m_new_artwork.size());
+        for(int i = 0; i < m_device->m_library.size(); i++) {
+            if(m_device->m_library[i] != nullptr && m_device->m_library[i]->album == m_album.title && m_device->m_library[i]->artist == m_album.artist) {
+                itdb_track_set_thumbnails_from_data(m_device->m_library[i], (const guchar*)m_new_artwork.data(), m_new_artwork.size());
             }
         }
         m_new_artwork.clear();
         m_frame->IndicateUnsavedChanges();
     }
     if(m_remove_artwork) {
-        for(int i = 0; i < m_frame->m_library.size(); i++) {
-            if(m_frame->m_library[i] != nullptr && m_frame->m_library[i]->album == m_album.title && m_frame->m_library[i]->artist == m_album.artist) {
-                itdb_track_remove_thumbnails(m_frame->m_library[i]);
+        for(int i = 0; i < m_device->m_library.size(); i++) {
+            if(m_device->m_library[i] != nullptr && m_device->m_library[i]->album == m_album.title && m_device->m_library[i]->artist == m_album.artist) {
+                itdb_track_remove_thumbnails(m_device->m_library[i]);
             }
         }
         m_frame->IndicateUnsavedChanges();

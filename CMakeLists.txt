@@ -15,6 +15,9 @@ include_directories(
 
 add_executable(wxPod
     src/main.cpp
+    src/device.cpp
+    src/tracklist.cpp
+    src/filters.cpp
     src/properties.cpp
 )
 
